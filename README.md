@@ -18,6 +18,9 @@ The reading of the input files executes line by line. This will use the minimal 
 The task scheduler handles all of the files in parallel. In this way multiple files can be processing at the same time on different threads.
 The processing of files is asynchronous such that any IO operations will not hog the thread.
 
+## Snapshot Testing
+Snap shot testing provides a unique way to make sure that the processed file looks correct without having to code it directly into the logic. Instead there is a verified file with the redacted PHI.
+
 ## Considerations
 I didn't use an Angular frontend. I think it's better to process the PHI directly on the client where the files exist rather than sending them over the network to a C# backend. Therefore this regex implementation could have been done within Typescript client side, however because most of this assignment was directed towards a C# implementation and a generic GUI, I went with WPF for the frontend.
 

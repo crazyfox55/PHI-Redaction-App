@@ -113,7 +113,7 @@ namespace PHI_Redaction_App
                 }, TaskContinuationOptions.OnlyOnFaulted)
             );
 
-            await Task.WhenAll(processingTasks);
+            Task.WhenAll(processingTasks).Wait();
 
             Status += "Processing complete.\n";
             IsProcessing = false;
