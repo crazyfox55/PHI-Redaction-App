@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using Microsoft.Win32;
 
@@ -49,13 +50,13 @@ namespace PHI_Redaction_App
 
         public RelayCommand AddFilesCommand { get; }
         public RelayCommand SelectFolderCommand { get; }
-        public RelayCommand ProcessCommand { get; }
+        public AsyncCommand ProcessCommand { get; }
 
         public MainViewModel()
         {
             AddFilesCommand = new RelayCommand(AddFiles);
             SelectFolderCommand = new RelayCommand(SelectFolder);
-            ProcessCommand = new RelayCommand(ProcessFiles, CanProcessFiles);
+            ProcessCommand = new AsyncCommand(ProcessFiles, CanProcessFiles);
         }
 
         private void AddFiles()
@@ -97,26 +98,37 @@ namespace PHI_Redaction_App
         private bool CanProcessFiles() =>
             !IsProcessing && SelectedFiles.Count > 0 && !string.IsNullOrEmpty(OutputFolderPath);
 
-        private async void ProcessFiles()
+        private async Task ProcessFiles()
         {
             IsProcessing = true;
             Status = string.Empty;
 
-            var processingTasks = SelectedFiles.Select(file =>
-                ProcessFileAsync(file)  // Remove async lambda, directly return Task
-                .ContinueWith(task =>
+            try
+            {
+                var processingTasks = SelectedFiles.Select(async file =>
                 {
-                    if (task.Exception != null)
+                    try
                     {
-                        Status += $"Error processing {file}: {task.Exception.InnerException?.Message}\n";
+                        await ProcessFileAsync(file);
                     }
-                }, TaskContinuationOptions.OnlyOnFaulted)
-            );
+                    catch (Exception ex)
+                    {
+                        Status += $"Error processing {file}: {ex.Message}\n";
+                    }
+                });
 
-            Task.WhenAll(processingTasks).Wait();
+                await Task.WhenAll(processingTasks);
 
-            Status += "Processing complete.\n";
-            IsProcessing = false;
+                Status += "Processing complete.\n";
+            }
+            catch (Exception ex)
+            {
+                Status += $"Unexpected error: {ex.Message}\n";
+            }
+            finally
+            {
+                IsProcessing = false;
+            }
         }
 
         private async Task ProcessFileAsync(string filePath)
@@ -174,5 +186,45 @@ namespace PHI_Redaction_App
         public bool CanExecute(object? parameter) => canExecute?.Invoke() ?? true;
 
         public void Execute(object? parameter) => execute();
+    }
+}
+
+public class AsyncCommand : ICommand
+{
+    private readonly Func<Task> _execute;
+    private readonly Func<bool> _canExecute;
+    private bool _isExecuting;
+
+    public AsyncCommand(Func<Task> execute, Func<bool> canExecute = null)
+    {
+        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        _canExecute = canExecute;
+    }
+
+    public bool CanExecute(object parameter)
+    {
+        return !_isExecuting && (_canExecute?.Invoke() ?? true);
+    }
+
+    public async void Execute(object parameter)
+    {
+        _isExecuting = true;
+        RaiseCanExecuteChanged();
+        try
+        {
+            await _execute();
+        }
+        finally
+        {
+            _isExecuting = false;
+            RaiseCanExecuteChanged();
+        }
+    }
+
+    public event EventHandler CanExecuteChanged;
+
+    public void RaiseCanExecuteChanged()
+    {
+        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 }
